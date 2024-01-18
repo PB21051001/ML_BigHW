@@ -30,8 +30,8 @@ def Abnormal_value(df):
             IQR = Q3 - Q1
             lower_bound = Q1 - 1.5 * IQR
             upper_bound = Q3 + 1.5 * IQR
-            df[column] = df[column].where(df[column] >= lower_bound, lower_bound)
-            df[column] = df[column].where(df[column] <= upper_bound, upper_bound)
+            df[column] = df[column].apply(lambda x: lower_bound if x < lower_bound and pd.notnull(x) else x)
+            df[column] = df[column].apply(lambda x: upper_bound if x > upper_bound and pd.notnull(x) else x)
     return df
 
 def Fill_1(df):
@@ -70,6 +70,30 @@ def Fill_2(df):
                     df[column] = df[column].bfill().ffill()
     return df
 
+def Fill_3(df):
+    """填补空值,数值数据使用中位数填充，文字数据使用众数填充"""
+    for column in df.columns:
+        if column != 'RRR':
+            if df[column].dtype == 'object':
+                # 对于非数值数据，使用众数填充缺失值
+                df[column] = df[column].fillna(df[column].mode()[0])
+            else:
+                # 输出非空元素
+                print(f"The non-null elements of {column} are:")
+                print(df[column].dropna())
+                # 计算中位数
+                median = df[column].median()
+                # 输出中位数
+                print(f"The median of {column} is {median}")
+                # 使用中位数填充缺失值
+                df[column] = df[column].fillna(median)
+    # 输出填充后的数据
+    print("\nData after filling missing values:")
+    print(df)
+    return df
+
+
+
 
 def Encoding(df, mapping_file, threshold=100, label_column='RRR', skip_columns=['VV']):
     """创建映射字典，对数据类型是汉字且种类小于100的列的值进行数字编码"""
@@ -90,11 +114,11 @@ def Mapping(df, mapping_file):
     mode_mapping_dict = mode_dict.map(mapping_dict).fillna(0)  # 计算众数对应的映射值，如果不存在，填充为 0
     for column in df.columns:
         if column in mapping_dict:
-            df[column] = df[column].map(mapping_dict[column]).fillna(mode_dict[column]).astype(float)  # 使用众数填充 NaN 值，转换为浮点数
+            df[column] = df[column].map(mapping_dict[column]).fillna(mode_mapping_dict[column]).astype(float)  # 使用众数对应的映射值填充 NaN 值，然后转换为浮点数
         elif column == 'VV':
             df[column] = df[column].apply(lambda x: 0.0 if pd.isnull(x) or x == '低于 0.1' else float(x))
         elif column == 'RRR':
-            df[column] = df[column].apply(lambda x: 0.0 if x == '无降水' else 1.0 if pd.notnull(x) else x)
+            df[column] = df[column].apply(lambda x: 1.0 if x == '无降水' else 0.0 if pd.notnull(x) else x)
     return df
 
 def Compute_scaling(df,scaling_file, method='minmax', label_column='RRR'):
@@ -224,20 +248,20 @@ def main(input_file, output_train_file, output_test_file,  mapping_file, scaling
     df = Delete_column(df, columns_to_drop)
     
     df = Abnormal_value(df)
-
+    View_data(df)
     df = Fill_1(df)
     #df = Fill_2(df)
+    #df = Fill_3(df)
    
     
     # Encoding(df, mapping_file)  # 创建并保存映射字典
     df = Mapping(df, mapping_file)  # 应用映射字典
     
-    print("\nData after filling missing values:")
-    print(df)
     
-    Compute_scaling(df, scaling_file)  # 创建并保存特征缩放的参数
+    #Compute_scaling(df, scaling_file)  # 创建并保存特征缩放的参数
     df = Apply_scaling(df, scaling_file)  # 应用特征缩放的参数
 
+    
     # 聚类算法填补空缺标签
     Cluster(df, n_clusters=2, label_column=label_column)
     
@@ -251,12 +275,13 @@ def main(input_file, output_train_file, output_test_file,  mapping_file, scaling
     print('Done!')
 
 
+
 # 定义文件路径
 
 input_file = 'Big_HW/training_dataset.xls'
 #input_file = 'Big_HW/test.xls'
-output_train = 'Big_HW/train_1.json'
-output_test = 'Big_HW/test_1.json'
+output_train = 'Big_HW/train_2.json'
+output_test = 'Big_HW/test_2.json'
 
 scaling_file = 'Big_HW/scaling_dict.json'
 mapping_file = 'Big_HW/mapping_dict.json'
